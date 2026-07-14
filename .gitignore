@@ -1,5 +1,12 @@
 Five Nights at Freddy's/
 
+# run artifacts (screenshots, logs)
+runs/
+
+# live-capture fixtures are large; regenerate locally
+tests/fixtures/live/*.png
+!tests/fixtures/live/.gitkeep
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
