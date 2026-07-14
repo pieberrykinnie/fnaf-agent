@@ -118,6 +118,8 @@ def probe_bettercam(region: dict[str, int], out_png: Path) -> dict[str, Any]:
             frame = cam.grab(region=box)
         if frame is None:
             result["error"] = "grab returned None twice (no desktop change or duplication blocked)"
+            if cam is not None:
+                cam.release()
             return result
 
         cv2.imwrite(str(out_png), frame)
