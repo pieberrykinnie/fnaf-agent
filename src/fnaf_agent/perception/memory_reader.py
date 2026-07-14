@@ -5,12 +5,12 @@ The reader is built on two pieces:
 - MemoryAccess: a tiny protocol (module base lookup + typed reads). The live
   implementation wraps pymem; tests inject a dict-backed fake, so the whole
   pointer-chain and field-decoding path is unit-tested offline.
-- MemoryMap: parsed from assets/memory_map.yaml, which the human-assisted
-  Cheat Engine session fills in. Fields whose chain is still the TBD
-  placeholder are skipped (reported via MemoryMap.unmapped), so the reader
-  degrades gracefully while the map is incomplete.
+- MemoryMap: parsed from assets/memory_map.yaml, which the human-guided
+  scan session (scripts/memory_scan.py) fills in. Fields whose chain is
+  still the TBD placeholder are skipped (reported via MemoryMap.unmapped),
+  so the reader degrades gracefully while the map is incomplete.
 
-Pointer chain semantics (standard Cheat Engine convention):
+Pointer chain semantics (the usual module+offsets convention):
     base = module_base(module) + module_offset
     for each offset in offsets: base = read_ptr(base) + offset
     value = read_<type>(base)
@@ -85,7 +85,7 @@ class FieldSpec:
 class MemoryMap:
     process: str
     fields: dict[str, FieldSpec]
-    unmapped: list[str]  # field names still waiting on the Cheat Engine session
+    unmapped: list[str]  # field names still waiting on the memory-scan session
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> MemoryMap:

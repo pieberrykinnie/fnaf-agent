@@ -2,8 +2,8 @@
 save PNGs + a metadata JSON (geometry, DPI, backend timings) to runs/.
 
 Decides the capture backend for the live loop. Fails loudly (non-zero exit,
-window inventory printed) if the game window is not found, so a wrong
-dgVoodoo2 setup is caught here and not three layers up.
+window inventory printed) if the game window is not found, so a windowing
+problem is caught here and not three layers up.
 
 Usage: uv run python scripts/capture_probe.py [window-title-substring]
 """

@@ -156,7 +156,7 @@ def test_reader_assembles_gamestate() -> None:
 def test_shipped_memory_map_template_parses() -> None:
     m = MemoryMap.from_yaml(REPO / "assets" / "memory_map.yaml")
     assert m.process == GAME
-    # Template ships fully unmapped; the Cheat Engine session fills it in.
+    # Template ships fully unmapped; the memory-scan session fills it in.
     # This asserts schema validity either way, without pinning progress.
     for name in ("power", "hour", "night", "active_camera", "monitor_up"):
         assert name in m.fields or name in m.unmapped

@@ -1,8 +1,8 @@
 """Screen <-> canonical 1280x720 coordinate transform.
 
-The game renders a 1280x720 logical frame. Under dgVoodoo2 (or any windowed
-wrapper) the client area on screen may be scaled and, if its aspect ratio is
-not 16:9, letterboxed/pillarboxed. This module is the single place where
+The game renders a 1280x720 logical frame. In a window (native windowed mode
+or any wrapper) the client area on screen may be scaled and, if its aspect
+ratio is not 16:9, letterboxed/pillarboxed. This module is the single place where
 screen pixels and canonical coordinates meet: perception and control code
 only ever speak canonical, and convert at the capture/input boundary.
 

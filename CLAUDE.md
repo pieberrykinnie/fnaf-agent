@@ -4,7 +4,7 @@ AI agent that plays Five Nights at Freddy's 1 live. See PLAN.md for phases; BACK
 
 ## Scoping (read first)
 
-- **MVP is non-negotiable: a live agent that survives Night 1, by any means necessary.** Memory reads for state, dgVoodoo2 windowing, scripted heuristics — all allowed.
+- **MVP is non-negotiable: a live agent that survives Night 1, by any means necessary.** Memory reads for state, scripted heuristics — all allowed. One boundary: **open-source tooling only** (Cheat Engine is banned — closed source; use `scripts/memory_scan.py`).
 - Post-MVP work follows the purity ladder in PLAN.md (vision → audio → learned policy → human-like motor model), strictly in order. Never start a tier before the previous one's exit test passes.
 - When two designs compete, pick the one that ships a live-playing agent sooner.
 
@@ -21,6 +21,8 @@ AI agent that plays Five Nights at Freddy's 1 live. See PLAN.md for phases; BACK
 - `uv run pytest` — full test suite (offline; never launches the game)
 - `uv run ruff check --fix . && uv run ruff format .` — lint/format
 - `uv run python scripts/capture_probe.py` — capture one screenshot to runs/
+- `uv run python scripts/attach_probe.py` — attach to game process, dump modules, read mapped fields (M1+)
+- `uv run python scripts/memory_scan.py` — interactive open-source memory scanner (the Cheat Engine replacement; human-guided)
 - `uv run python scripts/verify_state.py` — same-tick screenshot + GameState JSON to runs/ (M1+)
 - `uv run python scripts/verify_control.py <action-script>` — execute actions, save before/after screenshots + state deltas (M2+)
 - `uv run python scripts/verify_perception.py [image.png]` — annotated overlay PNG + GameState JSON to runs/ (Tier 1+)
@@ -51,11 +53,11 @@ AI agent that plays Five Nights at Freddy's 1 live. See PLAN.md for phases; BACK
 - Input is not click-only: office pan = hover at screen edge; monitor raise = hover over the bottom strip. Use move-and-dwell primitives.
 - Every action is act-then-verify: send input → confirm expected GameState delta → retry once → abort loudly.
 - Memory reads (pymem) are the MVP state source; from Tier 1 on they are a test oracle only, and in Tier 4 they leave the live path entirely.
-- Human touchpoints (flag in output, don't attempt): bootstrap, dgVoodoo2 install, Cheat Engine address hunt.
+- Human touchpoints (flag in output, don't attempt): bootstrap, game launches, guided memory-scan session (`scripts/memory_scan.py`).
 
 ## Gotchas
 
-- (Phase 0 to confirm) FNAF 1 is DirectDraw exclusive-fullscreen; may defeat capture and offset clicks. Preferred fix: dgVoodoo2 borderless-windowed; fallbacks DxWnd, then desktop capture + calibrated transform. Set DPI-awareness (`SetProcessDpiAwareness`) either way.
+- RESOLVED (2026-07-14): FNAF 1 v1.132 is NOT exclusive-fullscreen — it runs in a plain titled window (~1280x720 physical client at 200% DPI) and mss captures it cleanly. No dgVoodoo2/DxWnd wrapper needed. Capture the CLIENT rect, not the window box: the box includes title bar + a desktop-bleed border sliver.
 - Clickteam polls the real cursor, so absolute SendInput moves work — but pace inputs; animation locks (monitor flip) can eat clicks. Act-then-verify catches this.
 - Camera static overlay defeats naïve template matching — grayscale, relaxed thresholds, median-stack 2–3 frames.
 - Extracted asset PNGs may have palette/alpha differences vs live captures — validate thresholds against real screenshots, not just composited fixtures.

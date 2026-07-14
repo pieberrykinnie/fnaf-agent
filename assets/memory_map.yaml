@@ -1,8 +1,9 @@
-# Memory map for FiveNightsatFreddys.exe — filled in by the human-assisted
-# Cheat Engine session (BACKLOG Phase M1). Until a field has a chain, leave
-# `chain: null`; MemoryStateReader skips it and reports it in `unmapped`.
+# Memory map for FiveNightsatFreddys.exe — filled in by the human-guided
+# scan session using scripts/memory_scan.py (BACKLOG Phase M1). Until a field
+# has a chain, leave `chain: null`; MemoryStateReader skips it and reports it
+# in `unmapped`.
 #
-# Chain semantics (Cheat Engine convention, 32-bit process):
+# Chain semantics (module+offsets convention, 32-bit process):
 #   addr = module_base(module) + module_offset
 #   for each offset: addr = [addr] + offset      # [x] = read 4-byte pointer
 #   value = read_<type>(addr)
@@ -12,10 +13,12 @@
 # enum_map translates a raw int to a label; for active_camera use the Camera
 # enum values from state.py ("1A".."7").
 #
-# How to record a chain found in Cheat Engine:
-#   "FiveNightsatFreddys.exe"+0004B2E8 -> 0x654 -> 0x30
-# becomes:
-#   chain: {module_offset: 0x4B2E8, offsets: [0x654, 0x30]}
+# How to record what memory_scan.py reports:
+#   static address printed as "FiveNightsatFreddys.exe+0x4B2E8"
+#     -> chain: {module_offset: 0x4B2E8}
+#   `ptr` hit "holder FiveNightsatFreddys.exe+0x4B2E8 offset 0x654" whose
+#   target was itself found via `ptr` at offset 0x30:
+#     -> chain: {module_offset: 0x4B2E8, offsets: [0x654, 0x30]}
 
 process: FiveNightsatFreddys.exe
 
