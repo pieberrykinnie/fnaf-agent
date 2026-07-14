@@ -1,6 +1,10 @@
 version = 1
 revision = 3
 requires-python = ">=3.14.6"
+resolution-markers = [
+    "sys_platform == 'win32'",
+    "sys_platform != 'win32'",
+]
 
 [[package]]
 name = "bettercam"
@@ -136,7 +140,7 @@ name = "fnaf-agent"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "bettercam" },
+    { name = "bettercam", marker = "sys_platform == 'win32'" },
     { name = "mss" },
     { name = "numpy" },
     { name = "opencv-python" },
@@ -161,7 +165,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bettercam", specifier = ">=1.0.0" },
+    { name = "bettercam", marker = "sys_platform == 'win32'", specifier = ">=1.0.0" },
     { name = "gymnasium", marker = "extra == 'rl'" },
     { name = "mss" },
     { name = "numpy" },
@@ -169,6 +173,7 @@ requires-dist = [
     { name = "pydirectinput" },
     { name = "pygetwindow" },
     { name = "pymem", specifier = ">=1.14.0" },
+    { name = "pymem", marker = "sys_platform == 'win32'", specifier = ">=1.14.0" },
     { name = "pyyaml" },
     { name = "stable-baselines3", marker = "extra == 'rl'", specifier = ">=2.9.0" },
 ]
