@@ -142,7 +142,11 @@ def probe_bettercam(region: dict[str, int], out_png: Path) -> dict[str, Any]:
         result["none_grab_note"] = (
             "bettercam returns None on unchanged frames; live loop must keep last frame"
         )
+        if cam is not None:
+            cam.release()
     except Exception as e:  # noqa: BLE001 - probe records, never crashes on a backend
+        if cam is not None:
+            cam.release()
         result["error"] = f"{type(e).__name__}: {e}"
     return result
 
