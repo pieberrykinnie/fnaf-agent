@@ -1,7 +1,16 @@
+"""Clickteam Fusion 2.5 runtime memory traversal.
+
+Ported from CTFPV (C#) to Python/pymem.  The entry point is CTFRuntime,
+which attaches to a running CF 2.5 process, locates the global pointer
+table via the "PAMU" magic-byte signature, and exposes the runtime's
+object tree (names, alterable values, positions).
+"""
+
 import struct
 from typing import Any
 
 import pymem
+import pymem.pattern
 import pymem.process
 
 from fnaf_agent.perception.ct_offsets import (
@@ -18,32 +27,43 @@ class CTFMemoryError(Exception):
     pass
 
 
+def _read_wide_string(
+    pm: pymem.Pymem, ptr: int, max_chars: int = 256
+) -> str:
+    """Read a null-terminated UTF-16LE string from *ptr*."""
+    raw = bytearray()
+    for i in range(max_chars):
+        c = pm.read_bytes(ptr + i * 2, 2)
+        if c == b"\x00\x00":
+            break
+        raw.extend(c)
+    return raw.decode("utf-16le", errors="replace")
+
+
 class CTFValue:
     """Represents an alterable value (int or float)."""
 
     def __init__(self, val_type: int, raw_bytes: bytes):
         self.val_type = val_type
-        # In CF 2.5: Type 0 = int, 1 = string?, 2 = float
-        # Actually in CTFPV:
-        # if val.Type == 1 -> ActionType = 5 (string?)
-        # if val.Type == 2 -> ActionType = 4 (float?)
-        # Let's handle 0 as int and 2 as float, or just return raw.
-        # Wait, usually values are int or float.
         self.raw_bytes = raw_bytes
 
     @property
     def value(self) -> Any:
+        # CF 2.5 type codes: 0 = int, 2 = float
         if self.val_type == 2:
             return struct.unpack("<f", self.raw_bytes)[0]
-        else:
-            return struct.unpack("<i", self.raw_bytes)[0]
+        return struct.unpack("<i", self.raw_bytes)[0]
 
     def __repr__(self):
         return f"CTFValue(type={self.val_type}, val={self.value})"
 
 
 class CTFObject:
-    def __init__(self, pm: pymem.Pymem, addr: int, info_name: str, handle: int):
+    """A live CRunObject handle with lazy field reads."""
+
+    def __init__(
+        self, pm: pymem.Pymem, addr: int, info_name: str, handle: int
+    ):
         self.pm = pm
         self.addr = addr
         self.name = info_name
@@ -58,191 +78,217 @@ class CTFObject:
         return self.pm.read_int(self.addr + CRunObject.Y)
 
     def read_alterable_values(self) -> list[CTFValue]:
-        """Read alterable values (applicable mostly to Active Objects)."""
+        """Read alterable values (Active Objects only)."""
         try:
-            # deref(obj_ptr + 0x242) -> array of CRunValue
-            array_ptr = self.pm.read_int(self.addr + CRunActiveObject.ALTERABLE_VALUES_ARRAY)
+            array_ptr = self.pm.read_int(
+                self.addr + CRunActiveObject.ALTERABLE_VALUES_ARRAY
+            )
             if array_ptr == 0:
                 return []
 
-            count = self.pm.read_int(self.addr + CRunActiveObject.ALTERABLE_VALUES_COUNT)
+            count = self.pm.read_int(
+                self.addr + CRunActiveObject.ALTERABLE_VALUES_COUNT
+            )
             if count <= 0 or count > 1000:
                 return []
 
-            # Each CRunValue is 16 bytes:
-            # +0x0: Type (int)
-            # +0x8: Value (int or float)
+            # Each CRunValue is 16 bytes: +0 Type(int), +8 Value
             values = []
             for i in range(count):
-                element_addr = array_ptr + (i * 16)
-                val_type = self.pm.read_int(element_addr + CRunValue.TYPE)
-                raw_val = self.pm.read_bytes(element_addr + CRunValue.VALUE, 4)
+                base = array_ptr + i * 16
+                val_type = self.pm.read_int(base + CRunValue.TYPE)
+                raw_val = self.pm.read_bytes(base + CRunValue.VALUE, 4)
                 values.append(CTFValue(val_type, raw_val))
             return values
         except Exception:
             return []
 
     def read_alterable_strings(self) -> list[str]:
-        """Read alterable strings."""
+        """Read alterable strings (Active Objects only)."""
         try:
-            array_ptr = self.pm.read_int(self.addr + CRunActiveObject.ALTERABLE_STRINGS_ARRAY)
+            array_ptr = self.pm.read_int(
+                self.addr + CRunActiveObject.ALTERABLE_STRINGS_ARRAY
+            )
             if array_ptr == 0:
                 return []
 
-            count = self.pm.read_int(self.addr + CRunActiveObject.ALTERABLE_STRINGS_COUNT)
+            count = self.pm.read_int(
+                self.addr + CRunActiveObject.ALTERABLE_STRINGS_COUNT
+            )
             if count <= 0 or count > 1000:
                 return []
 
             strings = []
             for i in range(count):
-                # array_ptr points to array of pointers to wide strings
-                str_ptr = self.pm.read_int(array_ptr + (i * 4))
+                str_ptr = self.pm.read_int(array_ptr + i * 4)
                 if str_ptr == 0:
                     strings.append("")
                 else:
-                    # Read wide string
-                    # Read until null terminator (2 null bytes)
-                    raw = []
-                    while True:
-                        c = self.pm.read_bytes(str_ptr + len(raw), 2)
-                        if c == b"\x00\x00":
-                            break
-                        raw.append(c)
-                        if len(raw) > 256:  # sanity limit
-                            break
-                    strings.append(b"".join(raw).decode("utf-16le", errors="replace"))
+                    strings.append(_read_wide_string(self.pm, str_ptr))
             return strings
         except Exception:
             return []
 
     def __repr__(self):
-        return f"<CTFObject '{self.name}' @ {hex(self.addr)} (H:{self.handle})>"
+        return (
+            f"<CTFObject '{self.name}' "
+            f"@ {hex(self.addr)} (H:{self.handle})>"
+        )
 
 
 class CTFRuntime:
-    """Clickteam Fusion 2.5 Runtime Memory Interface."""
+    """Clickteam Fusion 2.5 Runtime Memory Interface.
 
-    def __init__(self, process_name: str = "FiveNightsatFreddys.exe"):
+    Memory layout at the global pointer table (3 consecutive 4-byte ptrs):
+        [_global_ptr_addr + 0]  →  CRunApp struct
+        [_global_ptr_addr + 4]  →  CRunFrame struct
+        [_global_ptr_addr + 8]  →  CRunHeader struct
+    """
+
+    def __init__(
+        self, process_name: str = "FiveNightsatFreddys.exe"
+    ):
         self.pm = pymem.Pymem(process_name)
-        self.base_address = pymem.process.module_from_name(
+        mod = pymem.process.module_from_name(
             self.pm.process_handle, process_name
-        ).lpBaseOfDll
-        self.crunapp_addr = self._find_crunapp()
-        if not self.crunapp_addr:
-            raise CTFMemoryError("Could not locate CRunApp (PAMU header) in memory.")
-
-    def _find_crunapp(self) -> int:
-        """Finds the main CRunApp struct pointer by pattern scanning."""
-        # 1. Find "PAMU" magic byte
-        # CTFPV uses PAMU exactly. Let's scan for PAMU.
-        magic_pattern = b"PAMU\x02\x03\x00\x00"
-        # We can also just search for PAMU, but PAMU\x02\x03\x00\x00 is safer.
-        matches = pymem.pattern.pattern_scan_all(
-            self.pm.process_handle, magic_pattern, return_multiple=True
         )
-        if not matches:
-            # Fallback: try just PAMU if we need to. But usually it's this.
-            return 0
-
-        # For each match, CTFPV checks if (match + 4) == 770 (0x0302).
-        # We already included \x02\x03 in the pattern! So `matches` are valid PAMU headers.
-
-        # 2. Find pointers to the PAMU header
-        # CF 2.5 stores a global pointer to CRunApp in the heap/BSS.
-        # CTFPV scans for pointers that point to the PAMU header.
-        for magic_addr in matches:
-            addr_bytes = struct.pack("<I", magic_addr)
-            ptr_matches = pymem.pattern.pattern_scan_all(
-                self.pm.process_handle, addr_bytes, return_multiple=True
+        self.base_address = mod.lpBaseOfDll
+        self._global_ptr_addr = self._find_global_pointer()
+        if not self._global_ptr_addr:
+            raise CTFMemoryError(
+                "Could not locate CRunApp (PAMU header) in memory."
             )
-            for ptr in ptr_matches:
-                # Calculate relative offset
-                offset = ptr - self.base_address
-                if 0 <= offset <= 1048576:  # CTFPV constraint
-                    # Found the global main pointer!
-                    # The pointer points to CRunApp.
-                    return ptr
-        return 0
+
+    # -- properties that dereference the global pointer table -----------
+
+    @property
+    def crunapp_addr(self) -> int:
+        """Address of the CRunApp struct (deref'd from global ptr)."""
+        return self.pm.read_int(self._global_ptr_addr)
 
     @property
     def crunframe_addr(self) -> int:
-        # MainPointer + 4 points to CRunFrame
-        return self.pm.read_int(self.crunapp_addr + 4)
+        """Address of the CRunFrame struct (deref'd from global ptr+4)."""
+        return self.pm.read_int(self._global_ptr_addr + 4)
 
-    def get_object_infos(self) -> dict:
-        """Reads the ObjectInfo array. Returns dict of handle -> name."""
-        app_ptr = self.pm.read_int(self.crunapp_addr)
+    # -- bootstrap: find the global pointer table ----------------------
 
-        max_handle = self.pm.read_int(app_ptr + CRunApp.OBJECT_INFO_MAX_HANDLE)
-        handle_to_index_ptr = self.pm.read_int(app_ptr + CRunApp.OBJECT_INFO_HANDLE_TO_INDEX)
-        infos_ptr = self.pm.read_int(app_ptr + CRunApp.OBJECT_INFOS)
+    def _find_global_pointer(self) -> int:
+        """Locate the global pointer table by scanning for PAMU magic.
 
-        handle_to_name = {}
+        Algorithm (mirroring CTFPV):
+        1. AoB-scan for "PAMU" + version 0x0302  →  PAMU header address.
+        2. AoB-scan for the 4-byte LE representation of that address →
+           candidate global pointers.
+        3. Filter to pointers within the first 1 MB of the module, and
+           validate that dereferencing them yields the PAMU header.
+        """
+        magic_pattern = b"PAMU\x02\x03\x00\x00"
+        matches = pymem.pattern.pattern_scan_all(
+            self.pm.process_handle,
+            magic_pattern,
+            return_multiple=True,
+        )
+        if not matches:
+            return 0
 
+        for magic_addr in matches:
+            addr_bytes = struct.pack("<I", magic_addr)
+            ptr_matches = pymem.pattern.pattern_scan_all(
+                self.pm.process_handle,
+                addr_bytes,
+                return_multiple=True,
+            )
+            for ptr in ptr_matches:
+                offset = ptr - self.base_address
+                if not (0 <= offset <= 1_048_576):
+                    continue
+                # Validate: deref should point back to PAMU
+                try:
+                    check = self.pm.read_bytes(
+                        self.pm.read_int(ptr), 4
+                    )
+                    if check == b"PAMU":
+                        return ptr
+                except Exception:
+                    continue
+        return 0
+
+    # -- object enumeration -------------------------------------------
+
+    def get_object_infos(self) -> dict[int, str]:
+        """Read the ObjectInfo table.  Returns {handle: name}."""
+        app = self.crunapp_addr
+
+        max_handle = self.pm.read_int(
+            app + CRunApp.OBJECT_INFO_MAX_HANDLE
+        )
+        h2i_ptr = self.pm.read_int(
+            app + CRunApp.OBJECT_INFO_HANDLE_TO_INDEX
+        )
+        infos_ptr = self.pm.read_int(app + CRunApp.OBJECT_INFOS)
+
+        result: dict[int, str] = {}
         for i in range(max_handle):
-            # Read index from short array
-            index = struct.unpack("<H", self.pm.read_bytes(handle_to_index_ptr + (i * 2), 2))[0]
+            idx = struct.unpack(
+                "<H", self.pm.read_bytes(h2i_ptr + i * 2, 2)
+            )[0]
 
-            # Read info pointer
-            info_ptr = self.pm.read_int(infos_ptr + (index * 4))
+            info_ptr = self.pm.read_int(infos_ptr + idx * 4)
             if info_ptr == 0:
                 continue
 
-            # Read name
-            name_ptr = self.pm.read_int(info_ptr + CRunObjectInfo.NAME)
+            name_ptr = self.pm.read_int(
+                info_ptr + CRunObjectInfo.NAME
+            )
             if name_ptr == 0:
                 continue
 
-            # Read wide string
-            raw = []
-            while True:
-                c = self.pm.read_bytes(name_ptr + len(raw), 2)
-                if c == b"\x00\x00":
-                    break
-                raw.append(c)
-                if len(raw) > 256:  # sanity limit
-                    break
-            name = b"".join(raw).decode("utf-16le", errors="replace")
+            result[i] = _read_wide_string(self.pm, name_ptr)
 
-            # Note: CRunObjectInfo also has HANDLE at +0. We can verify it matches i.
-            handle_to_name[i] = name
-
-        return handle_to_name
+        return result
 
     def enumerate_objects(self) -> list[CTFObject]:
-        """Enumerates all active objects in the current frame."""
-        frame_ptr = self.pm.read_int(self.crunframe_addr)
-        if frame_ptr == 0:
+        """Enumerate all active CRunObjects in the current frame."""
+        frame = self.crunframe_addr
+        if frame == 0:
             return []
 
-        max_objects = struct.unpack("<H", self.pm.read_bytes(frame_ptr + CRunFrame.MAX_OBJECTS, 2))[
-            0
-        ]
-        objects_array_ptr = self.pm.read_int(frame_ptr + CRunFrame.OBJECTS)
-        if objects_array_ptr == 0:
+        max_objects = struct.unpack(
+            "<H", self.pm.read_bytes(frame + CRunFrame.MAX_OBJECTS, 2)
+        )[0]
+        obj_array = self.pm.read_int(frame + CRunFrame.OBJECTS)
+        if obj_array == 0:
             return []
 
-        # We need ObjectInfos to map handles to names
         try:
             infos = self.get_object_infos()
         except Exception:
             infos = {}
 
-        objects = []
+        objects: list[CTFObject] = []
         for i in range(max_objects):
-            # Array of 8-byte elements. First 4 bytes is pointer.
-            obj_ptr = self.pm.read_int(objects_array_ptr + (i * 8))
+            # 8-byte slots: [ptr_to_CRunObject | 4-byte pad]
+            obj_ptr = self.pm.read_int(obj_array + i * 8)
             if obj_ptr == 0:
                 continue
 
-            # Read object header
-            handle = struct.unpack("<h", self.pm.read_bytes(obj_ptr + CRunObject.NUMBER, 2))[0]
-            obj_info_handle = struct.unpack(
-                "<h", self.pm.read_bytes(obj_ptr + CRunObject.OBJ_INFO_NUMBER, 2)
+            handle = struct.unpack(
+                "<h",
+                self.pm.read_bytes(obj_ptr + CRunObject.NUMBER, 2),
+            )[0]
+            oi_handle = struct.unpack(
+                "<h",
+                self.pm.read_bytes(
+                    obj_ptr + CRunObject.OBJ_INFO_NUMBER, 2
+                ),
             )[0]
 
-            name = infos.get(obj_info_handle, f"Unknown_{obj_info_handle}")
-
-            objects.append(CTFObject(self.pm, obj_ptr, name, handle))
+            name = infos.get(
+                oi_handle, f"Unknown_{oi_handle}"
+            )
+            objects.append(
+                CTFObject(self.pm, obj_ptr, name, handle)
+            )
 
         return objects
