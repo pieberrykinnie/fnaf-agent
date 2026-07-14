@@ -98,6 +98,7 @@ def probe_mss(region: dict[str, int], out_png: Path) -> dict[str, Any]:
 
 def probe_bettercam(region: dict[str, int], out_png: Path) -> dict[str, Any]:
     result: dict[str, Any] = {"backend": "bettercam"}
+    cam = None
     try:
         import bettercam
         import cv2
