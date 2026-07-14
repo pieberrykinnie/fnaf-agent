@@ -9,13 +9,14 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class CRunApp:
-    """Offsets from the CRunApp block (which starts with 'PAMU' magic)."""
+    """Offsets from the CRunApp block (starts with 'PAMU' magic)."""
 
-    FRAME_COUNT = 0x14  # Unverified but likely standard.
+    PRODUCT_BUILD = 0xC  # int — determines struct variant
+    FRAME_COUNT = 0xC4  # int (verified from CRunApp.cs)
     OBJECT_INFO_MAX_INDEX = 0x190
     OBJECT_INFO_MAX_HANDLE = 0x194
-    OBJECT_INFO_HANDLE_TO_INDEX = 0x198  # pointer to array of ushort
-    OBJECT_INFOS = 0x19C  # pointer to array of ptr to CRunObjectInfo
+    OBJECT_INFO_HANDLE_TO_INDEX = 0x198  # ptr → ushort[]
+    OBJECT_INFOS = 0x19C  # ptr → ptr[] → CRunObjectInfo
 
 
 @dataclass(frozen=True)
@@ -23,10 +24,8 @@ class CRunFrame:
     """Offsets from the CRunFrame block."""
 
     LEVEL_QUIT = 0x74
-    OBJECTS = (
-        0x8D0  # pointer to array of elements (size 8, where first 4 bytes is pointer to CRunObject)
-    )
-    MAX_OBJECTS = 0x8F0
+    OBJECTS = 0x8D0  # ptr → 8-byte-slot array
+    MAX_OBJECTS = 0x8F0  # ushort
 
 
 @dataclass(frozen=True)
@@ -35,7 +34,7 @@ class CRunObjectInfo:
 
     HANDLE = 0x0  # ushort
     TYPE = 0x2  # ushort
-    NAME = 0x10  # pointer to wide string (utf-16le)
+    NAME = 0x10  # ptr → UTF-16LE string
 
 
 @dataclass(frozen=True)
@@ -54,7 +53,7 @@ class CRunObject:
     Y = 0x54  # int
     WIDTH = 0x60  # int
     HEIGHT = 0x64  # int
-    IDENTIFIER = 0xB4  # 4 bytes ascii (e.g., "SPRI", "TEXT")
+    IDENTIFIER = 0xB4  # 4 bytes ascii ("SPRI", "CNTR", etc.)
 
     # Animation/Movement
     CURRENT_ANIMATION = 0xD8  # int
@@ -64,22 +63,43 @@ class CRunObject:
 
 @dataclass(frozen=True)
 class CRunActiveObject:
-    """Offsets from a CRunActiveObject block (which is an extension of CRunObject).
-    These offsets are relative to the SAME object pointer as CRunObject."""
+    """Offsets for Active Objects (Identifier "SPRI").
+    Relative to the CRunObject base address."""
 
-    # Alterable Values array pointer
-    # Memory structure: deref(obj_ptr + 0x242) gives pointer to array of CRunValue (size 16 each)
-    ALTERABLE_VALUES_ARRAY = 0x242
-    ALTERABLE_VALUES_COUNT = 0x246  # int count
+    ALTERABLE_VALUES_ARRAY = 0x242  # ptr → CRunValue[16 each]
+    ALTERABLE_VALUES_COUNT = 0x246  # int
+    ALTERABLE_STRINGS_ARRAY = 0x2C8  # ptr → ptr[]
+    ALTERABLE_STRINGS_COUNT = 0x2CC  # int
 
-    # Alterable Strings array pointer
-    ALTERABLE_STRINGS_ARRAY = 0x2C8
-    ALTERABLE_STRINGS_COUNT = 0x2CC  # int count
+
+@dataclass(frozen=True)
+class CRunSystemObject:
+    """Offsets for Counter/Lives/String objects.
+
+    These use a version-dependent "OddOffset" base:
+      build >= 292  →  OddOffset = 680 (0x2A8)
+      build <  292  →  OddOffset = 506 (0x1FA)
+
+    Value struct sits at obj_ptr + OddOffset + 8.
+    For int counters the raw value is stored inverted:
+      display_value = (-raw - 1)
+    """
+
+    # OddOffset values
+    ODD_OFFSET_NEW = 0x2A8  # build >= 292
+    ODD_OFFSET_OLD = 0x1FA  # build <  292
+
+    # Offsets relative to (obj_ptr + OddOffset)
+    OLD_LEVEL = 0x0  # int
+    LEVEL = 0x4  # int
+    VALUE_TYPE = 0x8  # int (CRunValue.Type)
+    VALUE_DATA = 0x10  # int/double (CRunValue + 8)
 
 
 @dataclass(frozen=True)
 class CRunValue:
-    """Offsets from a CRunValue block (Size = 16 bytes)."""
+    """Offsets within a CRunValue block (16 bytes)."""
 
-    TYPE = 0x0  # int
-    VALUE = 0x8  # int (or float depending on TYPE)
+    TYPE = 0x0  # int: 0=int, 1=string, 2=double
+    VALUE = 0x8  # int or float (4 bytes for alt-vals)
+

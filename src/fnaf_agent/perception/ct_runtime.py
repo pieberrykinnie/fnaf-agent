@@ -19,6 +19,7 @@ from fnaf_agent.perception.ct_offsets import (
     CRunFrame,
     CRunObject,
     CRunObjectInfo,
+    CRunSystemObject,
     CRunValue,
 )
 
@@ -62,9 +63,15 @@ class CTFObject:
     """A live CRunObject handle with lazy field reads."""
 
     def __init__(
-        self, pm: pymem.Pymem, addr: int, info_name: str, handle: int
+        self,
+        pm: pymem.Pymem,
+        addr: int,
+        info_name: str,
+        handle: int,
+        odd_offset: int = CRunSystemObject.ODD_OFFSET_NEW,
     ):
         self.pm = pm
+        self._odd_offset = odd_offset
         self.addr = addr
         self.name = info_name
         self.handle = handle
@@ -129,6 +136,49 @@ class CTFObject:
         except Exception:
             return []
 
+    @property
+    def identifier(self) -> str:
+        """4-byte ASCII tag: SPRI, CNTR, LIVE, TEXT, etc."""
+        raw = self.pm.read_bytes(
+            self.addr + CRunObject.IDENTIFIER, 4
+        )
+        return raw.decode("ascii", errors="replace").rstrip("\x00")
+
+    def read_counter_value(self) -> int | float | None:
+        """Read the value of a Counter/Lives object.
+
+        Returns the display value (int counters are stored
+        inverted: display = -raw - 1).
+        Returns None if this is not a counter object.
+        """
+        try:
+            ident = self.identifier
+            if ident not in (
+                "CNTR", "LIVE", "CN",
+                # some builds use 2-char tags
+            ):
+                return None
+
+            base = self.addr + self._odd_offset
+            val_type = self.pm.read_int(
+                base + CRunSystemObject.VALUE_TYPE
+            )
+
+            if val_type == 0:  # int
+                raw = self.pm.read_int(
+                    base + CRunSystemObject.VALUE_DATA
+                )
+                return (-raw) - 1
+            elif val_type == 2:  # double
+                raw_bytes = self.pm.read_bytes(
+                    base + CRunSystemObject.VALUE_DATA, 8
+                )
+                return struct.unpack("<d", raw_bytes)[0]
+            else:
+                return None
+        except Exception:
+            return None
+
     def __repr__(self):
         return (
             f"<CTFObject '{self.name}' "
@@ -165,6 +215,20 @@ class CTFRuntime:
     def crunapp_addr(self) -> int:
         """Address of the CRunApp struct (deref'd from global ptr)."""
         return self.pm.read_int(self._global_ptr_addr)
+
+    @property
+    def product_build(self) -> int:
+        """CF2.5 ProductBuild — determines struct variant."""
+        return self.pm.read_int(
+            self.crunapp_addr + CRunApp.PRODUCT_BUILD
+        )
+
+    @property
+    def odd_offset(self) -> int:
+        """Version-dependent offset for counter objects."""
+        if self.product_build >= 292:
+            return CRunSystemObject.ODD_OFFSET_NEW
+        return CRunSystemObject.ODD_OFFSET_OLD
 
     @property
     def crunframe_addr(self) -> int:
@@ -288,7 +352,13 @@ class CTFRuntime:
                 oi_handle, f"Unknown_{oi_handle}"
             )
             objects.append(
-                CTFObject(self.pm, obj_ptr, name, handle)
+                CTFObject(
+                    self.pm,
+                    obj_ptr,
+                    name,
+                    handle,
+                    odd_offset=self.odd_offset,
+                )
             )
 
         return objects

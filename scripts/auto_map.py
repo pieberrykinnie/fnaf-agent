@@ -1,3 +1,12 @@
+"""Enumerate all Clickteam Fusion objects in a live FNAF 1 session.
+
+Prints:
+  1. Active Objects with non-trivial alterable values.
+  2. Counter/Lives objects with their numeric values.
+  3. Full object name list with positions.
+"""
+
+import contextlib
 import sys
 
 from fnaf_agent.perception.ct_runtime import CTFRuntime
@@ -17,12 +26,11 @@ def main():
         return
 
     print("Attached successfully!")
-    print(
-        f"Global Pointer Table: "
-        f"{hex(runtime._global_ptr_addr)}"
-    )
-    print(f"  CRunApp  struct @ {hex(runtime.crunapp_addr)}")
-    print(f"  CRunFrame struct @ {hex(runtime.crunframe_addr)}")
+    print(f"Global Pointer Table : {hex(runtime._global_ptr_addr)}")
+    print(f"  CRunApp  struct    @ {hex(runtime.crunapp_addr)}")
+    print(f"  CRunFrame struct   @ {hex(runtime.crunframe_addr)}")
+    print(f"  ProductBuild       = {runtime.product_build}")
+    print(f"  OddOffset          = {hex(runtime.odd_offset)}")
 
     try:
         objects = runtime.enumerate_objects()
@@ -35,28 +43,48 @@ def main():
 
     print(f"\nFound {len(objects)} active objects.")
 
-    print("\n--- Objects with Alterable Values ---")
+    # --- Active Objects with alterable values ---
+    print("\n=== Active Objects with Alterable Values ===")
     for obj in objects:
         try:
             vals = obj.read_alterable_values()
-            if vals:
-                parts = [
-                    f"[{i}]={v.value}" for i, v in enumerate(vals)
-                ]
-                val_str = ", ".join(parts)
+            if not vals:
+                continue
+            # Only print if at least one value is non-zero
+            if not any(v.value != 0 for v in vals):
+                continue
+            parts = [f"[{i}]={v.value}" for i, v in enumerate(vals)]
+            print(
+                f"  H:{obj.handle:4} | "
+                f"{obj.name:<30} | {', '.join(parts)}"
+            )
+        except Exception:
+            pass
+
+    # --- Counter / Lives objects ---
+    print("\n=== Counter / Lives Objects ===")
+    for obj in objects:
+        try:
+            cv = obj.read_counter_value()
+            if cv is not None:
                 print(
-                    f"H:{obj.handle:4} | "
-                    f"{obj.name:<30} | {val_str}"
+                    f"  H:{obj.handle:4} | "
+                    f"{obj.name:<30} | value = {cv}"
                 )
         except Exception:
             pass
 
-    print("\n--- All Objects (name list) ---")
+    # --- Full object list ---
+    print("\n=== All Objects ===")
     for obj in objects:
+        ident = ""
+        with contextlib.suppress(Exception):
+            ident = obj.identifier
         print(
             f"  H:{obj.handle:4}  "
-            f"Name={obj.name:<30}  "
-            f"Pos=({obj.x}, {obj.y})"
+            f"[{ident:<4}]  "
+            f"{obj.name:<30}  "
+            f"({obj.x}, {obj.y})"
         )
 
 
