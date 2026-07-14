@@ -64,7 +64,9 @@ AI agent that plays Five Nights at Freddy's 1 live. See PLAN.md for phases; BACK
 - Memory addresses may shift per launch — use pointer chains from static bases; run a sanity check at session start (`verify_state.py`).
 - Host display runs 200% scaling (window DPI 192). With per-monitor DPI awareness set (capture_probe does this), all window/screen coords are physical pixels. pygetwindow's `box` includes invisible borders/shadow — use `GetClientRect`+`ClientToScreen` for the capture region.
 - Windows console is cp1252; printing arbitrary window titles crashes with UnicodeEncodeError. Scripts must `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`.
-- Capture timings on this host (2880x1798 desktop-window grab, 2026-07-14): bettercam (Desktop Duplication) ~8 ms median vs mss ~34 ms. bettercam returns None when the frame is unchanged since last grab — the latest-frame slot must retain the previous frame. Final backend decision still pending the live-game probe.
+- DECIDED (live-game probe 2026-07-14): capture backend is **bettercam** (3.6 ms median vs mss 11.4 ms on the 1280x720 game client; both verified pixel-perfect). mss is the fallback. bettercam returns None when the frame is unchanged since last grab — the latest-frame slot must retain the previous frame.
+- The game window's client rect is exactly 1280x720 physical pixels (probe: client at (800,562)) — the canonical transform degenerates to a pure offset, scale 1.0. Don't hardcode that offset; the window moves between launches, so read the client rect each session.
+- Capture works with the game window unfocused (`is_active: false` in probe) — focus is only an input-sending requirement.
 
 ## Style
 

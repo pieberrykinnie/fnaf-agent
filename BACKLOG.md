@@ -5,7 +5,7 @@ Work top-down. One item = one session increment. Done means: pytest green, verif
 ## Phase 0 — Bootstrap + windowing probe
 - [x] HUMAN: run `scripts/bootstrap.ps1`; launch game once and confirm it runs. (Done 2026-07-14. dgVoodoo2 turned out unnecessary — v1.132 runs windowed natively; stub-probe screenshot confirmed clean mss capture of the title menu.)
 - [x] Implement `scripts/capture_probe.py` for real: enumerate windows, capture via mss AND bettercam, save PNGs + metadata JSON (geometry, DPI, backend timings) to `runs/`. (Verified end-to-end against a non-game window 2026-07-14; bettercam ~8 ms vs mss ~34 ms.)
-- [ ] INTEGRATION (after HUMAN bootstrap): run capture_probe against the live game; commit real screenshot to `tests/fixtures/live/`; record backend + windowing decision in CLAUDE.md Gotchas
+- [x] INTEGRATION: capture_probe run against the live game (2026-07-14): client rect exactly 1280x720 physical; bettercam 3.6 ms vs mss 11.4 ms → **bettercam decided**, mss fallback; both PNGs inspected pixel-perfect. `tests/fixtures/live/title_menu.png` committed; decision in CLAUDE.md Gotchas
 - [x] Canonical transform (screen ↔ 1280x720) from probe geometry; implement + unit test `perception/canonical.py`
 
 ## Phase M1 — State by any means (memory-first)
