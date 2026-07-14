@@ -11,8 +11,8 @@ dependencies = [
     "pydirectinput",
     "pygetwindow",
     "pyyaml",
-    "bettercam>=1.0.0",
-    "pymem>=1.14.0",
+    "bettercam>=1.0.0; platform_system == 'Windows'",
+    "pymem>=1.14.0; platform_system == 'Windows'",
 ]
 
 [project.optional-dependencies]
