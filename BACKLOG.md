@@ -13,7 +13,7 @@ Work top-down. One item = one session increment. Done means: pytest green, verif
 - [ ] HUMAN-assisted: guided scan session with `scripts/memory_scan.py` (open-source, in-repo; Cheat Engine banned as closed-source) to find power, hour, night, active camera, door/light/monitor states (+ animatronic positions if findable); record addresses/pointer chains in `assets/memory_map.yaml` (template + schema ready; see file header for how to transcribe chains)
 - [ ] `MemoryStateReader` → GameState from memory_map.yaml; survives game restart (pointer chains, re-scan fallback script). Acceptance: values stable across two game launches. (Reader + pointer-chain resolver already implemented and unit-tested offline in `perception/memory_reader.py`; remaining: live stability check across two launches)
 - [ ] Phash screen classifier (menu/office+camera/jumpscare/6AM) from a handful of live screenshots — covers what memory reads awkwardly. Acceptance: fixture test on live captures
-- [ ] `scripts/verify_state.py`: same-tick screenshot + GameState JSON to `runs/`. INTEGRATION acceptance: Claude inspects pair and confirms they agree
+- [ ] `scripts/verify_state.py`: same-tick screenshot + GameState JSON to `runs/`. INTEGRATION acceptance: Claude inspects pair and confirms they agree. (Script + `perception/capture.py` FrameSource — bettercam→mss, keep-last-frame — implemented offline 2026-07-14; remaining: live run once memory_map has chains)
 
 ## Phase M2 — Control
 - [ ] Window manager: find/launch/focus, fail-loud focus assertion, kill switch (mouse-to-corner) + 15-min watchdog
