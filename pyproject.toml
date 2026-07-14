@@ -12,6 +12,7 @@ dependencies = [
     "pygetwindow",
     "pyyaml",
     "bettercam>=1.0.0",
+    "pymem>=1.14.0",
 ]
 
 [project.optional-dependencies]

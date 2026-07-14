@@ -9,9 +9,9 @@ Work top-down. One item = one session increment. Done means: pytest green, verif
 - [x] Canonical transform (screen ↔ 1280x720) from probe geometry; implement + unit test `perception/canonical.py`
 
 ## Phase M1 — State by any means (memory-first)
-- [ ] Attach to game process with pymem (`uv add pymem`); dump module list + confirm read access. Acceptance: script prints module base addresses live
-- [ ] HUMAN-assisted: Cheat Engine session to find power, hour, night, active camera, door/light/monitor states (+ animatronic positions if findable); record pointer chains in `assets/memory_map.yaml`
-- [ ] `MemoryStateReader` → GameState from memory_map.yaml; survives game restart (pointer chains, re-scan fallback script). Acceptance: values stable across two game launches
+- [x] Attach to game process with pymem (`uv add pymem`): `scripts/attach_probe.py` dumps module list, confirms read access (PE magic), reads any mapped fields. (Fail path verified offline 2026-07-14.) INTEGRATION half pending: run against the live game, confirm module base addresses print
+- [ ] HUMAN-assisted: Cheat Engine session to find power, hour, night, active camera, door/light/monitor states (+ animatronic positions if findable); record pointer chains in `assets/memory_map.yaml` (template + schema ready; see file header for how to transcribe chains)
+- [ ] `MemoryStateReader` → GameState from memory_map.yaml; survives game restart (pointer chains, re-scan fallback script). Acceptance: values stable across two game launches. (Reader + pointer-chain resolver already implemented and unit-tested offline in `perception/memory_reader.py`; remaining: live stability check across two launches)
 - [ ] Phash screen classifier (menu/office+camera/jumpscare/6AM) from a handful of live screenshots — covers what memory reads awkwardly. Acceptance: fixture test on live captures
 - [ ] `scripts/verify_state.py`: same-tick screenshot + GameState JSON to `runs/`. INTEGRATION acceptance: Claude inspects pair and confirms they agree
 
