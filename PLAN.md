@@ -12,7 +12,7 @@ When choosing between two designs, pick whichever ships a live-playing agent soo
 
 Claude can't watch the game live, so every layer must be verifiable from artifacts it can read (PNGs via Read, JSON, pytest output). Enablers:
 
-1. **Memory oracle**: Clickteam Fusion keeps game globals (power, hour, night, AI levels, door states) in easily-located process memory. One human-assisted Cheat Engine session yields addresses; after that, `pymem` gives perfect ground-truth GameState at any moment — both the MVP's state source and the automated labeler that later validates the vision pipeline.
+1. **Memory oracle**: Clickteam Fusion keeps game globals (power, hour, night, AI levels, door states) in easily-located process memory. One human-guided session with our **in-repo, open-source scanner** (`scripts/memory_scan.py`, built on `pymem` — Cheat Engine is rejected: closed-source) yields addresses; after that, `pymem` gives perfect ground-truth GameState at any moment — both the MVP's state source and the automated labeler that later validates the vision pipeline.
 2. **Extracted assets**: ~18k sprites in `Five Nights at Freddy's/FiveNightsatFreddys/images/` — every camera view, animatronic pose, UI element, HUD digit. The vision tier is built and unit-tested offline against these.
 3. **Documented mechanics**: FNAF 1 AI levels/movement/power rules are public — an offline simulator for RL training is verifiable against the wiki.
 
@@ -33,7 +33,7 @@ capture thread ──► latest-frame slot (never queue; always freshest)
 
 Design decisions from the live-loop brainstorm:
 
-- **Windowing/capture**: FNAF 1 is DirectDraw exclusive-fullscreen; that can defeat capture and skew coordinates. Preferred fix: **dgVoodoo2** (DirectDraw→D3D11 wrapper, borderless windowed at chosen scale — fixes capture and coordinate mapping at once). Fallbacks: DxWnd, then full-desktop capture + calibrated stretch transform. Backends: `mss` (simple) vs `bettercam` (Desktop Duplication, 60+ fps, frames only on change). Phase 0 probe decides.
+- **Windowing/capture**: FNAF 1 was assumed DirectDraw exclusive-fullscreen. **Resolved 2026-07-14: v1.132 runs in a plain titled window (~1280x720 client at 200% DPI) and mss captures it cleanly — no dgVoodoo2 needed.** Wrapper contingencies (dgVoodoo2, DxWnd) stay listed only as fallbacks if a fullscreen-only mode ever forces the issue. Backends: `mss` (simple) vs `bettercam` (Desktop Duplication, 60+ fps, frames only on change) — bettercam ~4x faster on this host; live-game timing pending.
 - **Canonical frame**: all coordinates in 1280x720 logical space; a single calibrated transform at the capture/input boundary.
 - **Input is not click-only**: office panning = hover at screen edges; monitor raise = hover over bottom strip. Executor needs move-and-dwell primitives plus clicks (`pydirectinput`/SendInput; Clickteam polls real cursor position).
 - **Act-then-verify**: every action confirms its expected GameState delta on the next read, retries once, then aborts loudly. This is what makes a screen-bot reliable, and it's nearly free.
@@ -43,10 +43,10 @@ Design decisions from the live-loop brainstorm:
 ## MVP phases
 
 ### Phase 0 — Bootstrap + windowing probe
-Human runs `scripts/bootstrap.ps1`, installs dgVoodoo2 into the game folder, launches once. Probe script decides capture backend, records window geometry/DPI, saves a real screenshot to fixtures. Exit: pytest green + committed live screenshot + capture decision in CLAUDE.md Gotchas.
+Human runs `scripts/bootstrap.ps1` and launches the game once (no wrapper needed — v1.132 runs windowed; see design decisions). Probe script decides capture backend, records window geometry/DPI, saves a real screenshot to fixtures. Exit: pytest green + committed live screenshot + capture decision in CLAUDE.md Gotchas.
 
 ### Phase M1 — State by any means (memory-first)
-Human-assisted Cheat Engine session finds addresses/pointer chains for power, hour, night, camera, doors, lights, monitor, and (if findable) animatronic positions; recorded in `assets/memory_map.yaml`. `MemoryStateReader` produces GameState via pymem. Thin vision assist only where memory is awkward: phash screen classifier for menu/jumpscare/6AM. Exit: `scripts/verify_state.py` dumps live GameState JSON matching a screenshot taken in the same tick (Claude inspects both).
+Human-guided scan session using `scripts/memory_scan.py` (in-repo, pymem-based; no closed-source tooling) finds addresses/pointer chains for power, hour, night, camera, doors, lights, monitor, and (if findable) animatronic positions; recorded in `assets/memory_map.yaml`. `MemoryStateReader` produces GameState via pymem. Thin vision assist only where memory is awkward: phash screen classifier for menu/jumpscare/6AM. Exit: `scripts/verify_state.py` dumps live GameState JSON matching a screenshot taken in the same tick (Claude inspects both).
 
 ### Phase M2 — Control
 Window find/focus/launch, kill switch (mouse-to-corner FAILSAFE) + 15-min watchdog. Primitives: click, move, dwell-hover. All Actions implemented with act-then-verify against memory state. Exit: `scripts/verify_control.py` runs an action script; before/after screenshots + state deltas prove every action.
@@ -66,7 +66,7 @@ Audio perception for Kitchen tracking, Foxy sprint, door knocks; fuse into GameS
 Offline simulator of documented mechanics (same GameState/Action interface; property tests vs wiki; calibrated against Phase M3 run logs). Gymnasium env with **state-vector observations** (CPU-only rules out pixel RL; real time rules out on-game training — 1 night ≈ 8.6 min). Train SB3 PPO/DQN on sim, evaluate on sim, transfer to live via GameInterface. Exit: sim-trained policy survives live Night 1+; stretch: 4/20 mode in sim.
 
 ### Tier 4 — Plays like a human
-No memory access at runtime at all (delete the oracle from the live path). Human-ish motor model: ~150–250 ms reaction latency, curved mouse trajectories with noise, capped APM. Native fullscreen (drop dgVoodoo2) if capture allows. Exit: side-by-side run log indistinguishable-in-kind from a human playthrough (reaction-time histogram, input traces).
+No memory access at runtime at all (delete the oracle from the live path). Human-ish motor model: ~150–250 ms reaction latency, curved mouse trajectories with noise, capped APM. Fullscreen probe if capture allows (the game already runs windowed natively, so this is optional polish). Exit: side-by-side run log indistinguishable-in-kind from a human playthrough (reaction-time histogram, input traces).
 
 ## Autonomy infrastructure
 
@@ -74,11 +74,11 @@ No memory access at runtime at all (delete the oracle from the live path). Human
 - **BACKLOG.md**: ordered queue with acceptance criteria; one item per session increment.
 - **.claude/settings.json**: pre-approved permissions so sessions don't stall.
 - **Verification protocol**: no live-loop change is done until its verify-script artifact is generated and inspected with Read, and pytest is green.
-- **Human touchpoints are explicit and front-loaded**: bootstrap, dgVoodoo2 install, one Cheat Engine session. Everything else is Claude solo.
+- **Human touchpoints are explicit and front-loaded**: bootstrap, game launches, one guided memory-scan session (`scripts/memory_scan.py`). Everything else is Claude solo. Only open-source tooling.
 
 ## Risks
 
 - **Memory addresses unstable across launches** → prefer pointer chains from static base; re-scan script + `verify_state.py` sanity check at session start; if hopeless, fall back to accelerating Tier 1 vision (MVP tolerates either means).
-- **dgVoodoo2 breaks the game or timing** → DxWnd, then desktop capture + transform; probe decides in Phase 0, before anything is built on top.
+- ~~dgVoodoo2 breaks the game or timing~~ → resolved: no wrapper needed, game runs windowed natively (2026-07-14).
 - **Input rejected/dropped** → SendInput via pydirectinput, paced; act-then-verify catches drops; focus assertion before every send.
 - **Sim-to-real gap (Tier 3)** → state-vector policy + sim calibrated against real run logs from M3.

@@ -1,0 +1,56 @@
+# Memory map for FiveNightsatFreddys.exe — filled in by the human-guided
+# scan session using scripts/memory_scan.py (BACKLOG Phase M1). Until a field
+# has a chain, leave `chain: null`; MemoryStateReader skips it and reports it
+# in `unmapped`.
+#
+# Chain semantics (module+offsets convention, 32-bit process):
+#   addr = module_base(module) + module_offset
+#   for each offset: addr = [addr] + offset      # [x] = read 4-byte pointer
+#   value = read_<type>(addr)
+# Empty/omitted `offsets` = static address at module_base + module_offset.
+#
+# Types: i32 (default), u8, f64, bool (i32, nonzero = true).
+# enum_map translates a raw int to a label; for active_camera use the Camera
+# enum values from state.py ("1A".."7").
+#
+# How to record what memory_scan.py reports:
+#   static address printed as "FiveNightsatFreddys.exe+0x4B2E8"
+#     -> chain: {module_offset: 0x4B2E8}
+#   `ptr` hit "holder FiveNightsatFreddys.exe+0x4B2E8 offset 0x654" whose
+#   target was itself found via `ptr` at offset 0x30:
+#     -> chain: {module_offset: 0x4B2E8, offsets: [0x654, 0x30]}
+
+process: FiveNightsatFreddys.exe
+
+fields:
+  power:          # 0..99 as displayed; confirm whether stored x100 or raw
+    type: i32
+    chain: null
+  hour:           # 12AM stored as 0? confirm encoding
+    type: i32
+    chain: null
+  night:
+    type: i32
+    chain: null
+  active_camera:
+    type: i32
+    chain: null
+    # enum_map: {0: "1A", 1: "1B", ...}   # fill in observed raw values
+  door_left_closed:
+    type: bool
+    chain: null
+  door_right_closed:
+    type: bool
+    chain: null
+  light_left_on:
+    type: bool
+    chain: null
+  light_right_on:
+    type: bool
+    chain: null
+  monitor_up:
+    type: bool
+    chain: null
+  usage_bars:     # 1..5
+    type: i32
+    chain: null
