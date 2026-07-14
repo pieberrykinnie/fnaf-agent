@@ -237,6 +237,53 @@ class CTFRuntime:
 
     # -- bootstrap: find the global pointer table ----------------------
 
+    def _robust_pattern_scan(self, pattern: bytes) -> list[int]:
+        """Safely scan process memory, ignoring partial copy errors (299)."""
+        import sys
+
+        matches = []
+        user_space_limit = 0x7FFFFFFF0000 if sys.maxsize > 2**32 else 0x7fff0000
+        next_region = 0
+
+        while next_region < user_space_limit:
+            try:
+                mbi = pymem.memory.virtual_query(
+                    self.pm.process_handle, next_region
+                )
+            except Exception:
+                break
+
+            next_region = mbi.BaseAddress + mbi.RegionSize
+
+            allowed_protections = [
+                pymem.ressources.structure.MEMORY_PROTECTION.PAGE_EXECUTE,
+                pymem.ressources.structure.MEMORY_PROTECTION.PAGE_EXECUTE_READ,
+                pymem.ressources.structure.MEMORY_PROTECTION.PAGE_EXECUTE_READWRITE,
+                pymem.ressources.structure.MEMORY_PROTECTION.PAGE_READWRITE,
+                pymem.ressources.structure.MEMORY_PROTECTION.PAGE_READONLY,
+            ]
+            if (
+                mbi.state != pymem.ressources.structure.MEMORY_STATE.MEM_COMMIT
+                or mbi.protect not in allowed_protections
+            ):
+                continue
+
+            try:
+                page_bytes = self.pm.read_bytes(
+                    mbi.BaseAddress, mbi.RegionSize
+                )
+            except Exception:
+                continue
+
+            idx = -1
+            while True:
+                idx = page_bytes.find(pattern, idx + 1)
+                if idx == -1:
+                    break
+                matches.append(mbi.BaseAddress + idx)
+
+        return matches
+
     def _find_global_pointer(self) -> int:
         """Locate the global pointer table by scanning for PAMU magic.
 
@@ -248,21 +295,13 @@ class CTFRuntime:
            validate that dereferencing them yields the PAMU header.
         """
         magic_pattern = b"PAMU\x02\x03\x00\x00"
-        matches = pymem.pattern.pattern_scan_all(
-            self.pm.process_handle,
-            magic_pattern,
-            return_multiple=True,
-        )
+        matches = self._robust_pattern_scan(magic_pattern)
         if not matches:
             return 0
 
         for magic_addr in matches:
             addr_bytes = struct.pack("<I", magic_addr)
-            ptr_matches = pymem.pattern.pattern_scan_all(
-                self.pm.process_handle,
-                addr_bytes,
-                return_multiple=True,
-            )
+            ptr_matches = self._robust_pattern_scan(addr_bytes)
             for ptr in ptr_matches:
                 offset = ptr - self.base_address
                 if not (0 <= offset <= 1_048_576):
