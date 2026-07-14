@@ -60,6 +60,9 @@ AI agent that plays Five Nights at Freddy's 1 live. See PLAN.md for phases; BACK
 - Camera static overlay defeats naïve template matching — grayscale, relaxed thresholds, median-stack 2–3 frames.
 - Extracted asset PNGs may have palette/alpha differences vs live captures — validate thresholds against real screenshots, not just composited fixtures.
 - Memory addresses may shift per launch — use pointer chains from static bases; run a sanity check at session start (`verify_state.py`).
+- Host display runs 200% scaling (window DPI 192). With per-monitor DPI awareness set (capture_probe does this), all window/screen coords are physical pixels. pygetwindow's `box` includes invisible borders/shadow — use `GetClientRect`+`ClientToScreen` for the capture region.
+- Windows console is cp1252; printing arbitrary window titles crashes with UnicodeEncodeError. Scripts must `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`.
+- Capture timings on this host (2880x1798 desktop-window grab, 2026-07-14): bettercam (Desktop Duplication) ~8 ms median vs mss ~34 ms. bettercam returns None when the frame is unchanged since last grab — the latest-frame slot must retain the previous frame. Final backend decision still pending the live-game probe.
 
 ## Style
 

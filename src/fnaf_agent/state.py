@@ -27,12 +27,12 @@ class Camera(Enum):
     CAM_1C = "1C"  # Pirate Cove
     CAM_2A = "2A"  # West Hall
     CAM_2B = "2B"  # West Hall Corner
-    CAM_3 = "3"    # Supply Closet
+    CAM_3 = "3"  # Supply Closet
     CAM_4A = "4A"  # East Hall
     CAM_4B = "4B"  # East Hall Corner
-    CAM_5 = "5"    # Backstage
-    CAM_6 = "6"    # Kitchen (audio only)
-    CAM_7 = "7"    # Restrooms
+    CAM_5 = "5"  # Backstage
+    CAM_6 = "6"  # Kitchen (audio only)
+    CAM_7 = "7"  # Restrooms
 
 
 class Animatronic(Enum):
@@ -62,7 +62,9 @@ class Action:
     camera: Camera | None = None
 
     def to_json(self) -> str:
-        return json.dumps({"type": self.type.value, "camera": self.camera.value if self.camera else None})
+        return json.dumps(
+            {"type": self.type.value, "camera": self.camera.value if self.camera else None}
+        )
 
 
 @dataclass

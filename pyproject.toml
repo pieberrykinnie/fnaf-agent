@@ -11,6 +11,7 @@ dependencies = [
     "pydirectinput",
     "pygetwindow",
     "pyyaml",
+    "bettercam>=1.0.0",
 ]
 
 [project.optional-dependencies]

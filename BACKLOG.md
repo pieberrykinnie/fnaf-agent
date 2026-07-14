@@ -4,8 +4,9 @@ Work top-down. One item = one session increment. Done means: pytest green, verif
 
 ## Phase 0 — Bootstrap + windowing probe
 - [ ] HUMAN: run `scripts/bootstrap.ps1`; install dgVoodoo2 into the game folder (ddraw.dll + config, borderless windowed); launch game once and confirm it runs
-- [ ] Implement `scripts/capture_probe.py` for real: enumerate windows, capture via mss AND bettercam, save PNGs + metadata JSON (geometry, DPI, backend timings) to `runs/`. Acceptance: real screenshot committed to `tests/fixtures/live/`; backend + windowing decision recorded in CLAUDE.md Gotchas
-- [ ] Canonical transform (screen ↔ 1280x720) from probe geometry; implement + unit test `perception/canonical.py`
+- [x] Implement `scripts/capture_probe.py` for real: enumerate windows, capture via mss AND bettercam, save PNGs + metadata JSON (geometry, DPI, backend timings) to `runs/`. (Verified end-to-end against a non-game window 2026-07-14; bettercam ~8 ms vs mss ~34 ms.)
+- [ ] INTEGRATION (after HUMAN bootstrap): run capture_probe against the live game; commit real screenshot to `tests/fixtures/live/`; record backend + windowing decision in CLAUDE.md Gotchas
+- [x] Canonical transform (screen ↔ 1280x720) from probe geometry; implement + unit test `perception/canonical.py`
 
 ## Phase M1 — State by any means (memory-first)
 - [ ] Attach to game process with pymem (`uv add pymem`); dump module list + confirm read access. Acceptance: script prints module base addresses live
