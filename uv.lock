@@ -146,7 +146,7 @@ dependencies = [
     { name = "opencv-python" },
     { name = "pydirectinput" },
     { name = "pygetwindow" },
-    { name = "pymem" },
+    { name = "pymem", marker = "sys_platform == 'win32'" },
     { name = "pyyaml" },
 ]
 
@@ -172,7 +172,6 @@ requires-dist = [
     { name = "opencv-python", specifier = ">=5.0.0.93" },
     { name = "pydirectinput" },
     { name = "pygetwindow" },
-    { name = "pymem", specifier = ">=1.14.0" },
     { name = "pymem", marker = "sys_platform == 'win32'", specifier = ">=1.14.0" },
     { name = "pyyaml" },
     { name = "stable-baselines3", marker = "extra == 'rl'", specifier = ">=2.9.0" },
