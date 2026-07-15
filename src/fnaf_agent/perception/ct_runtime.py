@@ -313,9 +313,10 @@ def __init__(
             return 0
 
         for magic_addr in matches:
+            if magic_addr > 0xFFFFFFFF:
+                continue
             addr_bytes = struct.pack("<I", magic_addr)
             ptr_matches = self._robust_pattern_scan(addr_bytes)
-            for ptr in ptr_matches:
                 offset = ptr - self.base_address
                 if not (0 <= offset <= 1_048_576):
                     continue
