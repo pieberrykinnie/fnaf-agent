@@ -179,3 +179,57 @@ class PymemAccess:
 
     def read_f64(self, address: int) -> float:
         return self._pm.read_double(address)
+
+
+@dataclass(frozen=True)
+class CTFFieldSpec:
+    """Mapping for dynamic Clickteam Fusion object lookup."""
+
+    object_name: str
+    value_index: int
+
+
+class CTFMemoryStateReader:
+    """Reads state dynamically from Clickteam Fusion's object list.
+
+    This avoids brittle static pointer chains by scanning the active
+    objects array for known names (e.g., 'DoorLeft') every frame.
+    """
+
+    def __init__(
+        self,
+        process_name: str = "FiveNightsatFreddys.exe",
+        fields: dict[str, CTFFieldSpec] | None = None,
+    ) -> None:
+        from fnaf_agent.perception.ct_runtime import CTFRuntime
+
+        self.runtime = CTFRuntime(process_name)
+        self.fields = fields or {}
+    def read(self) -> GameState:
+        state = GameState()
+        try:
+            objects = self.runtime.enumerate_objects()
+        except Exception:
+            return state
+
+        # Clickteam allows multiple objects with the same name, but singletons
+        # like managers/doors usually map 1:1.
+        obj_by_name = {obj.name: obj for obj in objects}
+
+        for state_field, spec in self.fields.items():
+            obj = obj_by_name.get(spec.object_name)
+            if not obj:
+                continue
+
+            vals = obj.read_alterable_values()
+            if spec.value_index < len(vals):
+                val = vals[spec.value_index].value
+
+                if state_field in _INT_FIELDS:
+                    setattr(state, state_field, int(val))
+                elif state_field in _BOOL_FIELDS:
+                    setattr(state, state_field, bool(val))
+                elif state_field == "active_camera":
+                    state.active_camera = Camera(int(val))
+
+        return state
