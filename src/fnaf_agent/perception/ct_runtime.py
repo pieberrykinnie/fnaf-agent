@@ -203,9 +203,14 @@ class CTFRuntime:
         [_global_ptr_addr + 8]  →  CRunHeader struct
     """
 
-    def __init__(
+def __init__(
         self, process_name: str = "FiveNightsatFreddys.exe"
     ):
+        if pymem is None:  # pragma: no cover
+            raise ImportError(
+                "CTFRuntime requires 'pymem' (Windows-only dependency)."
+            ) from _PYMEM_IMPORT_ERROR
+
         self.pm = pymem.Pymem(process_name)
         mod = pymem.process.module_from_name(
             self.pm.process_handle, process_name
