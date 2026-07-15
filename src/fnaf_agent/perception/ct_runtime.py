@@ -6,13 +6,21 @@ table via the "PAMU" magic-byte signature, and exposes the runtime's
 object tree (names, alterable values, positions).
 """
 
+from __future__ import annotations
+
 import struct
 from typing import Any
 
-import pymem
-import pymem.pattern
-import pymem.process
-
+try:
+    import pymem
+    import pymem.memory
+    import pymem.process
+    import pymem.ressources.structure
+except Exception as _pymem_import_error:  # pragma: no cover
+    pymem = None  # type: ignore[assignment]
+    _PYMEM_IMPORT_ERROR = _pymem_import_error
+else:
+    _PYMEM_IMPORT_ERROR = None
 from fnaf_agent.perception.ct_offsets import (
     CRunActiveObject,
     CRunApp,
@@ -377,11 +385,11 @@ class CTFRuntime:
                 continue
 
             handle = struct.unpack(
-                "<h",
+                "<H",
                 self.pm.read_bytes(obj_ptr + CRunObject.NUMBER, 2),
             )[0]
             oi_handle = struct.unpack(
-                "<h",
+                "<H",
                 self.pm.read_bytes(
                     obj_ptr + CRunObject.OBJ_INFO_NUMBER, 2
                 ),

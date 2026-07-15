@@ -187,7 +187,6 @@ class CTFFieldSpec:
 
     object_name: str
     value_index: int
-    type: str = "i32"
 
 
 class CTFMemoryStateReader:
@@ -198,13 +197,14 @@ class CTFMemoryStateReader:
     """
 
     def __init__(
-        self, process_name: str = "FiveNightsatFreddys.exe", fields: dict[str, CTFFieldSpec] = None
+        self,
+        process_name: str = "FiveNightsatFreddys.exe",
+        fields: dict[str, CTFFieldSpec] | None = None,
     ) -> None:
         from fnaf_agent.perception.ct_runtime import CTFRuntime
 
         self.runtime = CTFRuntime(process_name)
         self.fields = fields or {}
-
     def read(self) -> GameState:
         state = GameState()
         try:
