@@ -203,7 +203,7 @@ class CTFRuntime:
         [_global_ptr_addr + 8]  →  CRunHeader struct
     """
 
-def __init__(
+    def __init__(
         self, process_name: str = "FiveNightsatFreddys.exe"
     ):
         if pymem is None:  # pragma: no cover
@@ -317,6 +317,7 @@ def __init__(
                 continue
             addr_bytes = struct.pack("<I", magic_addr)
             ptr_matches = self._robust_pattern_scan(addr_bytes)
+            for ptr in ptr_matches:
                 offset = ptr - self.base_address
                 if not (0 <= offset <= 1_048_576):
                     continue
